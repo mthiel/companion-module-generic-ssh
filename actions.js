@@ -29,34 +29,55 @@ module.exports = function (self) {
 				// NOTE: if you need \n to be in the string without a linefeed, you can use \\n to escape \n representing linefeed
 				let currentCmds = cmdParsed.split(/\\*(?<!\\)\\n/g)
 
-				currentCmds.forEach((element) => {
+				for (const element of currentCmds) {
 					// make sure to replace any \\n with a regular \n
 					let currentCmd = element.replace(/\\\\n/g, '\\n')
 
 					self.log('debug', 'Executing command: ' + currentCmd)
 
-					self.sshClient.exec(currentCmd, (err, stream) => {
-						stream.stderr.on('data', (data) => {
-							// here is where a STDERR happened
-							self.setVariableValues({ [self.getConstants().CMD_ERROR_VAR_NAME]: true })
-							self.checkFeedbacks(self.getConstants().CMD_ERROR_FEEDBACK_NAME)
-							self.log('error', 'Command: ' + currentCmd + ' wrote to STDERR: ')
-						})
+					await new Promise((resolve) => {
+						self.sshClient.exec(currentCmd, (err, stream) => {
+							// Set up a timeout to resolve the promise if the command takes too long
+							const timeout = setTimeout(() => {
+								self.log('error', 'Command: ' + currentCmd + ' timed out')
+								complete()
+							}, 4000)
 
-						stream.on('exit', (code) => {
-							if (code != 0) {
-								// we have an error code that is not 0 coming back, show error status
+							function complete() {
+								self.log('debug', 'Command ' + currentCmd + ' completed.')
+								if (timeout) clearTimeout(timeout)
+								stream.end()
+								resolve()
+							}
+
+							function setErrorCondition() {
 								self.setVariableValues({ [self.getConstants().CMD_ERROR_VAR_NAME]: true })
 								self.checkFeedbacks(self.getConstants().CMD_ERROR_FEEDBACK_NAME)
-								self.log('error', 'Command: ' + currentCmd + ' exited with error code: ' + code)
 							}
-						})
 
-						stream.on('data', (data) => {
-							self.log('debug', data.toString())
+							stream.stderr.on('data', (data) => {
+								// here is where a STDERR happened
+								setErrorCondition()
+								self.log('debug', 'Command: ' + currentCmd + ' wrote to STDERR: ' + data.toString())
+								complete()
+							})
+
+							stream.on('exit', (code) => {
+								if (code != 0) {
+									// we have an error code that is not 0 coming back, show error status
+									setErrorCondition()
+								}
+
+								self.log('debug', 'Command: ' + currentCmd + ' exited with error code: ' + code)
+								complete()
+							})
+
+							stream.on('data', (data) => {
+								self.log('debug', data.toString())
+							})
 						})
 					})
-				})
+				}
 			},
 		},
 		shellCommand: {
