@@ -1,3 +1,7 @@
+/**
+ * Companion Module for action definitions
+ * @param {import('./main').SSHInstance} self
+ */
 module.exports = function (self) {
 	self.setActionDefinitions({
 		execCommand: {

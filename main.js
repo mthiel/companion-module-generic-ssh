@@ -278,3 +278,5 @@ class SSHInstance extends InstanceBase {
 }
 
 runEntrypoint(SSHInstance, [])
+
+module.exports = { SSHInstance }
